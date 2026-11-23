@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>4-Year Average Tracker</title>
+<style>
+:root{
+  --page:#f9f9f7;--surface:#fcfcfb;--card:#ffffff;--ink:#0b0b0b;--ink2:#52514e;--muted:#7a7972;
+  --grid:#e1e0d9;--axis:#c3c2b7;--line:#2a78d6;--buy:#0ca30c;--buy-ink:#006300;--buy-bg:#e5f5e5;
+  --sell:#d03b3b;--sell-ink:#a32222;--sell-bg:#fbe9e9;--hold-bg:#efeee9;--zone:rgba(12,163,12,.08);
+  --accent:#2a78d6;--radius:12px;
+}
+@media (prefers-color-scheme:dark){:root{
+  --page:#0d0d0d;--surface:#1a1a19;--card:#1a1a19;--ink:#f0efec;--ink2:#c3c2b7;--muted:#95948c;
+  --grid:#2c2c2a;--axis:#383835;--line:#3987e5;--buy:#0ca30c;--buy-ink:#3fc33f;--buy-bg:#13301a;
+  --sell:#d03b3b;--sell-ink:#f07070;--sell-bg:#3a1717;--hold-bg:#2a2a28;--zone:rgba(12,163,12,.12);--accent:#3987e5;
+}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font:15px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:860px;margin:0 auto;padding:16px 14px 48px}
+h1{font-size:22px;margin:4px 0 2px;letter-spacing:-.01em}
+.sub{color:var(--ink2);font-size:13px;margin:0 0 14px}
+.demo{background:#fab219;color:#0b0b0b;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:600;margin-bottom:12px}
+.panel{background:var(--card);border:1px solid var(--grid);border-radius:var(--radius);padding:12px;margin-bottom:12px}
+.row-ctl{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center}
+.lbl{font-size:12px;color:var(--ink2);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-right:6px}
+.seg{display:inline-flex;background:var(--hold-bg);border-radius:9px;padding:2px}
+.seg button{border:0;background:transparent;color:var(--ink2);font-family:inherit;font-weight:600;font-size:13px;line-height:1;padding:8px 11px;border-radius:7px;cursor:pointer;min-height:34px}
+.seg button[aria-pressed=true]{background:var(--card);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.15)}
+.ctl-group{display:flex;align-items:center}
+input[type=search],select{font:inherit;font-size:15px;color:var(--ink);background:var(--surface);border:1px solid var(--axis);border-radius:9px;padding:8px 10px;min-height:38px}
+input[type=search]{flex:1 1 180px;min-width:0}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+@media (max-width:560px){.tiles{grid-template-columns:repeat(2,1fr)}}
+.tile{border:1px solid var(--grid);background:var(--card);border-radius:var(--radius);padding:10px 12px;text-align:left;cursor:pointer;font:inherit;color:inherit}
+.tile[aria-pressed=true]{outline:2px solid var(--accent);outline-offset:-1px}
+.tile .k{font-size:12px;font-weight:700;letter-spacing:.04em;display:flex;align-items:center;gap:6px}
+.tile .v{font-size:26px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
+.tile .d{font-size:12px;color:var(--ink2)}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.list{background:var(--card);border:1px solid var(--grid);border-radius:var(--radius);overflow:hidden}
+.item{border-top:1px solid var(--grid)}
+.item:first-child{border-top:0}
+.item>button{all:unset;box-sizing:border-box;width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:11px 12px;cursor:pointer}
+.item>button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.tk{font-weight:700}
+.nm{color:var(--ink2);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.pct{font-weight:700}
+.small{font-size:12px;color:var(--ink2)}
+.badge{font-size:11px;font-weight:800;letter-spacing:.05em;padding:4px 8px;border-radius:6px;min-width:58px;text-align:center;display:inline-flex;align-items:center;justify-content:center;gap:4px}
+.b-BUY{background:var(--buy-bg);color:var(--buy-ink)}
+.b-SELL{background:var(--sell-bg);color:var(--sell-ink)}
+.b-WATCH{background:#fff3d6;color:#7a4f00}
+@media (prefers-color-scheme:dark){.b-WATCH{background:#3a2c0c;color:#fab219}}
+.b-HOLD{background:var(--hold-bg);color:var(--ink2)}
+.b-NA{background:transparent;color:var(--muted);border:1px dashed var(--axis)}
+.detail{padding:4px 12px 14px}
+.earn{margin:12px 0 4px;border:1px solid var(--grid);border-radius:10px;padding:10px 12px}
+.earn h3{font-size:13px;margin:0 0 6px;display:flex;justify-content:space-between;gap:8px;align-items:center}
+.earn ul{list-style:none;margin:0;padding:0}
+.earn li{display:grid;grid-template-columns:22px 1fr;gap:4px;padding:4px 0;font-size:13px;border-top:1px solid var(--grid)}
+.earn li:first-child{border-top:0}
+.earn .ic{font-weight:800;text-align:center}
+.ic-y{color:var(--buy-ink)}.ic-n{color:var(--sell-ink)}.ic-u{color:var(--muted)}
+.earn .why{color:var(--ink2);font-size:12px}
+.earn .pe{font-size:12px;color:var(--ink2);margin-top:6px}
+.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px 14px;margin:8px 0 4px}
+.stats div{font-size:12px;color:var(--ink2)}
+.stats b{display:block;font-size:15px;color:var(--ink);font-variant-numeric:tabular-nums}
+.chart{position:relative;margin-top:8px}
+.chart svg{display:block;width:100%;height:auto;touch-action:pan-y}
+.tip{position:absolute;pointer-events:none;background:var(--card);border:1px solid var(--axis);border-radius:8px;padding:6px 8px;font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,.18);white-space:nowrap;display:none;font-variant-numeric:tabular-nums}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--ink2);margin-top:6px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:16px;height:0;border-top:2px solid}
+.more{display:block;width:100%;padding:12px;border:0;border-top:1px solid var(--grid);background:var(--surface);color:var(--accent);font-family:inherit;font-weight:600;font-size:14px;cursor:pointer}
+.empty{padding:24px;text-align:center;color:var(--ink2)}
+.foot{font-size:12px;color:var(--ink2);margin-top:18px;line-height:1.55}
+.foot h2{font-size:14px;color:var(--ink);margin:0 0 6px}
+a{color:var(--accent)}
+@media (max-width:480px){.tile .v{font-size:22px}.item>button{gap:8px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>4-Year Average Tracker</h1>
+  <p class="sub" id="sub"></p>
+  <div id="demo" class="demo" hidden>Demo mode: these are synthetic prices for invented companies, generated to preview the layout. Run <code>python tracker.py</code> for real data.</div>
+
+  <div class="panel">
+    <div class="row-ctl" style="margin-bottom:10px">
+      <div class="ctl-group"><span class="lbl">Sell at</span>
+        <div class="seg" id="thr" role="group" aria-label="Sell threshold above 4-year average">
+          <button data-v="10">+10%</button><button data-v="20">+20%</button><button data-v="30">+30%</button>
+        </div>
+      </div>
+      <div class="ctl-group"><span class="lbl">Index</span>
+        <div class="seg" id="idx" role="group" aria-label="Index">
+          <button data-v="all">All</button><button data-v="S&amp;P 500">S&amp;P 500</button><button data-v="FTSE 100">FTSE 100</button>
+        </div>
+      </div>
+    </div>
+    <div class="row-ctl">
+      <input type="search" id="q" placeholder="Search ticker, name or sector" aria-label="Search">
+      <select id="sort" aria-label="Sort">
+        <option value="pct">Biggest discount first</option>
+        <option value="-pct">Biggest premium first</option>
+        <option value="name">Name A–Z</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="tiles" id="tiles"></div>
+  <div class="list" id="list"></div>
+
+  <div class="foot">
+    <h2>How the signals work</h2>
+    <p><b>4-year average</b> = the mean of every daily closing price over the last four years (split-adjusted, not dividend-adjusted). It's treated as the stock's fair price.<br>
+    <b style="color:var(--buy-ink)">▼ BUY</b> when the latest price is at or below the 4-year average <i>and</i> earnings are healthy.<br>
+    <b>◆ WATCH</b> when it's at or below the average but earnings fail a check or have no data. It might be a bargain, or a value trap.<br>
+    <b style="color:var(--sell-ink)">▲ SELL</b> when the latest price is at least the chosen threshold above the average.<br>
+    <b>HOLD</b> anywhere in between. Stocks with less than <span id="mincov"></span> of 4 years' history show <b>N/A</b>, because their average isn't comparable yet.</p>
+    <p><b>Healthy earnings</b> means passing every check that has data: profitable in the latest year; earnings per share (EPS) at least as high as three years ago; no more than a 10% drop on the previous year; and analysts' next-year estimate at or above the last 12 months, if there is one. The first two must have data.</p>
+    <p>Prices: Yahoo Finance via yfinance, end-of-day. FTSE prices are in pence (p). This is a screening tool, not financial advice.</p>
+  </div>
+</div>
+
+<script>
+const DATA = /*__DATA__*/null;
+const NS = "http://www.w3.org/2000/svg";
+const PAGE = 60;
+const store = {
+  get(k, d){ try { const v = localStorage.getItem("avg4:" + k); return v === null ? d : v; } catch(e){ return d; } },
+  set(k, v){ try { localStorage.setItem("avg4:" + k, v); } catch(e){} }
+};
+const state = {
+  thr: +store.get("thr", 20), idx: store.get("idx", "all"), sig: "BUY",
+  q: "", sort: "pct", shown: PAGE, open: new Set()
+};
+
+const $ = id => document.getElementById(id);
+const fmtPct = x => (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(x * 100).toFixed(1) + "%";
+const fmtPx = (v, c) => c === "p" ? v.toLocaleString("en-GB", {maximumFractionDigits: 1}) + "p"
+                                  : "$" + v.toLocaleString("en-US", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+function signal(s){
+  if (s.cov < DATA.minCoverage) return "NA";
+  const pct = s.p / s.a - 1;
+  if (pct <= 0) return s.e && s.e.ok ? "BUY" : "WATCH";
+  if (pct >= state.thr / 100) return "SELL";
+  return "HOLD";
+}
+const LABEL = {BUY:"▼ BUY", WATCH:"◆ WATCH", SELL:"▲ SELL", HOLD:"HOLD", NA:"N/A"};
+
+function init(){
+  if (!DATA){ $("list").innerHTML = '<div class="empty">No data yet. Run <code>python tracker.py</code>.</div>'; return; }
+  DATA.stocks.forEach(s => { s.pct = s.p / s.a - 1; s.key = (s.t + " " + s.n + " " + s.s).toLowerCase(); });
+  const dates = DATA.stocks.map(s => s.d).sort();
+  $("sub").textContent = `${DATA.stocks.length} stocks · prices as of ${dates[dates.length-1] || "–"} · updated ${DATA.generated}`;
+  $("demo").hidden = !DATA.demo;
+  $("mincov").textContent = Math.round(DATA.minCoverage * 100) + "%";
+
+  bindSeg("thr", v => { state.thr = +v; store.set("thr", v); }, String(state.thr));
+  bindSeg("idx", v => { state.idx = v; store.set("idx", v); }, state.idx);
+  $("q").addEventListener("input", e => { state.q = e.target.value.trim().toLowerCase(); state.shown = PAGE; render(); });
+  $("sort").addEventListener("change", e => { state.sort = e.target.value; state.shown = PAGE; render(); });
+  render();
+}
+
+function bindSeg(id, onSet, initial){
+  const btns = [...$(id).querySelectorAll("button")];
+  const paint = v => btns.forEach(b => b.setAttribute("aria-pressed", b.dataset.v === v));
+  paint(initial);
+  btns.forEach(b => b.addEventListener("click", () => { onSet(b.dataset.v); paint(b.dataset.v); state.shown = PAGE; render(); }));
+}
+
+function render(){
+  const pool = DATA.stocks.filter(s => (state.idx === "all" || s.i === state.idx) && (!state.q || s.key.includes(state.q)));
+  pool.forEach(s => s.sig = signal(s));
+  const counts = {BUY:0, WATCH:0, HOLD:0, SELL:0};
+  pool.forEach(s => { if (counts[s.sig] !== undefined) counts[s.sig]++; });
+
+  const tiles = [
+    ["BUY", "var(--buy)", "cheap + earnings healthy"],
+    ["WATCH", "#fab219", "cheap, earnings weak"],
+    ["HOLD", "var(--axis)", `0 to +${state.thr}%`],
+    ["SELL", "var(--sell)", `+${state.thr}% or more`],
+  ];
+  $("tiles").innerHTML = tiles.map(([k, col, d]) =>
+    `<button class="tile" data-sig="${k}" aria-pressed="${state.sig === k}">
+       <div class="k"><span class="dot" style="background:${col}"></span>${LABEL[k]}</div>
+       <div class="v">${counts[k]}</div><div class="d">${d}</div></button>`).join("");
+  $("tiles").querySelectorAll(".tile").forEach(t => t.addEventListener("click", () => {
+    state.sig = state.sig === t.dataset.sig ? "ALL" : t.dataset.sig; state.shown = PAGE; render();
+  }));
+
+  let rows = state.sig === "ALL" ? pool : pool.filter(s => s.sig === state.sig);
+  const cmp = {pct:(a,b)=>a.pct-b.pct, "-pct":(a,b)=>b.pct-a.pct, name:(a,b)=>a.n.localeCompare(b.n)}[state.sort];
+  rows = rows.slice().sort(cmp);
+
+  const list = $("list");
+  list.innerHTML = "";
+  if (!rows.length){
+    list.innerHTML = `<div class="empty">No stocks match. ${state.sig !== "ALL" ? "Tap the highlighted tile again to show every signal." : ""}</div>`;
+    return;
+  }
+  rows.slice(0, state.shown).forEach(s => list.appendChild(rowEl(s)));
+  if (rows.length > state.shown){
+    const more = document.createElement("button");
+    more.className = "more";
+    more.textContent = `Show more (${rows.length - state.shown} left)`;
+    more.onclick = () => { state.shown += PAGE; render(); };
+    list.appendChild(more);
+  }
+}
+
+function rowEl(s){
+  const el = document.createElement("div");
+  el.className = "item";
+  const pctCol = s.sig === "BUY" ? "var(--buy-ink)" : s.sig === "SELL" ? "var(--sell-ink)" : "var(--ink)";
+  el.innerHTML = `<button aria-expanded="${state.open.has(s.t)}">
+      <div style="min-width:0"><div class="tk">${esc(s.t)} <span class="small">· ${esc(s.i)}</span></div><div class="nm">${esc(s.n)}</div></div>
+      <div class="num"><div class="pct" style="color:${pctCol}">${fmtPct(s.pct)}</div><div class="small">${fmtPx(s.p, s.c)}</div></div>
+      <span class="badge b-${s.sig}">${LABEL[s.sig]}</span>
+    </button>`;
+  const btn = el.firstElementChild;
+  btn.addEventListener("click", () => {
+    if (state.open.has(s.t)) { state.open.delete(s.t); el.querySelector(".detail")?.remove(); btn.setAttribute("aria-expanded", false); }
+    else { state.open.add(s.t); el.appendChild(detailEl(s)); btn.setAttribute("aria-expanded", true); }
+  });
+  if (state.open.has(s.t)) el.appendChild(detailEl(s));
+  return el;
+}
+
+function detailEl(s){
+  const d = document.createElement("div");
+  d.className = "detail";
+  const sellAt = s.a * (1 + state.thr / 100);
+  const toBuy = s.a / s.p - 1, toSell = sellAt / s.p - 1;
+  d.innerHTML = `
+    <div class="stats">
+      <div>Latest price<b>${fmtPx(s.p, s.c)}</b></div>
+      <div>4-yr average (buy at)<b>${fmtPx(s.a, s.c)}</b></div>
+      <div>Sell at (+${state.thr}%)<b>${fmtPx(sellAt, s.c)}</b></div>
+      <div>Move needed to buy<b>${toBuy >= 0 ? "Already there" : fmtPct(toBuy)}</b></div>
+      <div>Move needed to sell<b>${toSell <= 0 ? "Already there" : fmtPct(toSell)}</b></div>
+      <div>4-yr low / high<b>${fmtPx(s.lo, s.c)} / ${fmtPx(s.hi, s.c)}</b></div>
+    </div>
+    <div class="small">${esc(s.s || "")}${s.s ? " · " : ""}last close ${s.d}${s.cov < DATA.minCoverage ? ` · only ${(s.cov * 4).toFixed(1)} years of history` : ""}</div>
+    ${earnBlock(s)}`;
+  d.appendChild(chart(s, sellAt));
+  return d;
+}
+
+function earnBlock(s){
+  if (!s.e) return s.pct <= 0.05 ? `<div class="earn"><h3>Earnings health</h3><div class="why">Not checked yet.</div></div>` : "";
+  const e = s.e;
+  const head = e.ok === true ? '<span class="badge b-BUY">✓ HEALTHY</span>'
+             : e.checks.some(c => c[1] === false) ? '<span class="badge b-SELL">✗ WEAK</span>'
+             : '<span class="badge b-NA">NO DATA</span>';
+  const icon = v => v === true ? '<span class="ic ic-y" aria-label="pass">✓</span>'
+                  : v === false ? '<span class="ic ic-n" aria-label="fail">✗</span>'
+                  : '<span class="ic ic-u" aria-label="no data">–</span>';
+  const items = e.checks.length
+    ? e.checks.map(([label, ok, why]) => `<li>${icon(ok)}<div>${esc(label)}<div class="why">${esc(why)}</div></div></li>`).join("")
+    : '<li><span class="ic ic-u">–</span><div>Yahoo has no earnings data for this company<div class="why">Treated as unproven, so it can only be WATCH, not BUY.</div></div></li>';
+  return `<div class="earn"><h3>Earnings health ${head}</h3><ul>${items}</ul>${e.pe ? `<div class="pe">Valuation: ${esc(e.pe)} (approx.)</div>` : ""}</div>`;
+}
+
+function svg(tag, attrs, parent){
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+
+function niceTicks(lo, hi, n){
+  const span = hi - lo, raw = span / n, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(st => span / st <= n) || 10 * mag;
+  const out = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(+v.toFixed(6));
+  return out;
+}
+
+function chart(s, sellAt){
+  const wrap = document.createElement("div");
+  wrap.className = "chart";
+  const W = 420, H = 230, m = {l: 4, r: 52, t: 10, b: 26};
+  const h = s.h, n = h.length;
+  const t0 = new Date(s.h0 + "T00:00:00Z").getTime();
+  const dates = h.map((_, i) => new Date(t0 + i * 7 * 864e5));
+  dates[n - 1] = new Date(s.d + "T00:00:00Z");
+  let lo = Math.min(...h, s.a), hi = Math.max(...h, sellAt);
+  const pad = (hi - lo) * 0.08; lo -= pad; hi += pad;
+  const x = i => m.l + (W - m.l - m.r) * (i / Math.max(1, n - 1));
+  const y = v => m.t + (H - m.t - m.b) * (1 - (v - lo) / (hi - lo));
+
+  const root = svg("svg", {viewBox: `0 0 ${W} ${H}`, role: "img",
+    "aria-label": `${s.t} weekly price over ${(s.cov*4).toFixed(1)} years versus its 4-year average of ${fmtPx(s.a, s.c)}`});
+
+  // discount zone (below average)
+  svg("rect", {x: m.l, y: y(s.a), width: W - m.l - m.r, height: Math.max(0, H - m.b - y(s.a)), fill: "var(--zone)"}, root);
+
+  // gridlines + y labels
+  niceTicks(lo, hi, 4).forEach(v => {
+    svg("line", {x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: "var(--grid)", "stroke-width": 1}, root);
+    const t = svg("text", {x: W - m.r + 6, y: y(v) + 4, fill: "var(--muted)", "font-size": 13}, root);
+    t.textContent = s.c === "p" ? Math.round(v).toLocaleString("en-GB") : "$" + (v >= 100 ? Math.round(v) : v.toFixed(v < 10 ? 2 : 0));
+  });
+  // year ticks
+  let lastYear = null;
+  dates.forEach((dt, i) => {
+    const yr = dt.getUTCFullYear();
+    if (lastYear !== null && yr !== lastYear && x(i) > m.l + 18 && x(i) < W - m.r - 18){
+      svg("line", {x1: x(i), x2: x(i), y1: H - m.b, y2: H - m.b + 4, stroke: "var(--axis)"}, root);
+      const t = svg("text", {x: x(i), y: H - 8, fill: "var(--muted)", "font-size": 13, "text-anchor": "middle"}, root);
+      t.textContent = yr;
+    }
+    lastYear = yr;
+  });
+  svg("line", {x1: m.l, x2: W - m.r, y1: H - m.b, y2: H - m.b, stroke: "var(--axis)"}, root);
+
+  // reference lines
+  svg("line", {x1: m.l, x2: W - m.r, y1: y(s.a), y2: y(s.a), stroke: "var(--buy)", "stroke-width": 1.5}, root);
+  svg("line", {x1: m.l, x2: W - m.r, y1: y(sellAt), y2: y(sellAt), stroke: "var(--sell)", "stroke-width": 1.5, "stroke-dasharray": "5 4"}, root);
+
+  // price line
+  svg("path", {d: h.map((v, i) => (i ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1)).join(""),
+    fill: "none", stroke: "var(--line)", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round"}, root);
+  svg("circle", {cx: x(n - 1), cy: y(h[n - 1]), r: 4, fill: "var(--line)", stroke: "var(--card)", "stroke-width": 2}, root);
+
+  // hover layer
+  const cross = svg("line", {y1: m.t, y2: H - m.b, stroke: "var(--ink2)", "stroke-width": 1, visibility: "hidden"}, root);
+  const dot = svg("circle", {r: 4.5, fill: "var(--line)", stroke: "var(--card)", "stroke-width": 2, visibility: "hidden"}, root);
+  const hit = svg("rect", {x: m.l, y: 0, width: W - m.l - m.r, height: H, fill: "transparent"}, root);
+  const tip = document.createElement("div");
+  tip.className = "tip";
+  const move = ev => {
+    const r = root.getBoundingClientRect();
+    const px = (ev.clientX - r.left) * (W / r.width);
+    const i = Math.max(0, Math.min(n - 1, Math.round((px - m.l) / (W - m.l - m.r) * (n - 1))));
+    cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i)); cross.setAttribute("visibility", "visible");
+    dot.setAttribute("cx", x(i)); dot.setAttribute("cy", y(h[i])); dot.setAttribute("visibility", "visible");
+    tip.innerHTML = `<b>${dates[i].toLocaleDateString("en-GB", {day: "numeric", month: "short", year: "numeric", timeZone: "UTC"})}</b><br>${fmtPx(h[i], s.c)} · ${fmtPct(h[i] / s.a - 1)} vs avg`;
+    tip.style.display = "block";
+    const sx = x(i) * r.width / W;
+    tip.style.left = Math.min(Math.max(0, sx - tip.offsetWidth / 2), r.width - tip.offsetWidth) + "px";
+    tip.style.top = "-8px";
+  };
+  const leave = () => { cross.setAttribute("visibility", "hidden"); dot.setAttribute("visibility", "hidden"); tip.style.display = "none"; };
+  hit.addEventListener("pointermove", move);
+  hit.addEventListener("pointerdown", move);
+  hit.addEventListener("pointerleave", leave);
+
+  wrap.appendChild(root);
+  wrap.appendChild(tip);
+  const lg = document.createElement("div");
+  lg.className = "legend";
+  lg.innerHTML = `<span><i class="sw" style="border-color:var(--line)"></i>Weekly close</span>
+    <span><i class="sw" style="border-color:var(--buy)"></i>4-yr average · buy at or below</span>
+    <span><i class="sw" style="border-color:var(--sell);border-top-style:dashed"></i>Sell line (+${state.thr}%)</span>`;
+  wrap.appendChild(lg);
+  return wrap;
+}
+
+init();
+</script>
+</body>
+</html>
