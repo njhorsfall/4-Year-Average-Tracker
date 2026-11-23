@@ -10,7 +10,7 @@ changed there without re-running this script):
   * 4-year average = "fair price"
   * price <= 4-year average AND earnings healthy -> BUY
   * price <= 4-year average, earnings weak/unknown -> WATCH (possible value trap)
-  * price >= 4-year average * (1 + X%)           -> SELL (X = 10 / 20 / 30, pick in page)
+  * price >= 4-year average * (1 + X%)           -> SELL (X from SELL_THRESHOLDS, pick in page)
   * anything in between                          -> HOLD
 
 Earnings are healthy when every check that has data passes (see earnings_health):
@@ -30,6 +30,7 @@ import argparse
 import datetime as dt
 import io
 import json
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -44,7 +45,13 @@ TICKER_CACHE = ROOT / "tickers_cache.csv"
 WATCHLIST = ROOT / "watchlist.csv"  # optional: extra tickers you want tracked
 FUND_CACHE = ROOT / "fundamentals_cache.json"
 
-YEARS = 4
+# ----------------------------- SETTINGS ----------------------------------- #
+SELL_THRESHOLDS = [20, 50, 75, 100]   # sell-line options (% above the 4-yr average) shown as buttons
+DEFAULT_SELL_THRESHOLD = 20      # which one is selected when the page first opens
+# --------------------------------------------------------------------------- #
+
+YEARS = 4                        # length of the "fair price" average
+HISTORY_YEARS = 10               # how much price history the charts can show
 MIN_COVERAGE = 0.9  # need at least 90% of 4 years of history to give a signal
 BATCH = 100
 # Earnings settings
@@ -130,10 +137,10 @@ def get_universe() -> pd.DataFrame:
 # 2. Prices
 # --------------------------------------------------------------------------- #
 def download_closes(tickers: list[str]) -> pd.DataFrame:
-    """Daily closes (split-adjusted, NOT dividend-adjusted) for ~4 years."""
+    """Daily closes (split-adjusted, NOT dividend-adjusted) for HISTORY_YEARS."""
     import yfinance as yf
 
-    start = (dt.date.today() - dt.timedelta(days=int(365.25 * YEARS) + 21)).isoformat()
+    start = (dt.date.today() - dt.timedelta(days=int(365.25 * HISTORY_YEARS) + 21)).isoformat()
     frames = []
     for i in range(0, len(tickers), BATCH):
         batch = tickers[i:i + BATCH]
@@ -160,6 +167,32 @@ def download_closes(tickers: list[str]) -> pd.DataFrame:
     return out.sort_index()
 
 
+def download_intraday(tickers: list[str]) -> pd.DataFrame:
+    """15-minute prices for the last 5 trading days (for the 1D and 5D charts).
+    Index is UTC. Failures here never stop the run - charts just skip 1D/5D."""
+    import yfinance as yf
+
+    frames = []
+    for i in range(0, len(tickers), BATCH):
+        batch = tickers[i:i + BATCH]
+        try:
+            df = yf.download(batch, period="5d", interval="15m", auto_adjust=False,
+                             actions=False, progress=False, threads=True)
+            close = df["Close"]
+            if isinstance(close, pd.Series):
+                close = close.to_frame(batch[0])
+            frames.append(close)
+        except Exception as exc:
+            print(f"    intraday batch {i} skipped: {exc}", file=sys.stderr)
+        time.sleep(1)
+    if not frames:
+        return pd.DataFrame()
+    out = pd.concat(frames, axis=1)
+    idx = pd.to_datetime(out.index)
+    out.index = idx.tz_localize("UTC") if idx.tz is None else idx.tz_convert("UTC")
+    return out.sort_index()
+
+
 def clean(s: pd.Series, london: bool) -> pd.Series:
     """Drop bad ticks. Yahoo sometimes quotes a London stock in pounds instead of
     pence for a day, which shows up as a price ~100x too small."""
@@ -173,8 +206,13 @@ def clean(s: pd.Series, london: bool) -> pd.Series:
 # --------------------------------------------------------------------------- #
 # 3. Analysis
 # --------------------------------------------------------------------------- #
-def analyse(closes: pd.DataFrame, uni: pd.DataFrame) -> list[dict]:
-    rows = []
+def _days(idx) -> list[int]:
+    return [int(pd.Timestamp(d).value // 86_400_000_000_000) for d in idx]  # days since 1970
+
+
+def analyse(closes: pd.DataFrame, uni: pd.DataFrame, intraday: pd.DataFrame) -> tuple[list[dict], dict]:
+    """Returns (summary rows for the list, per-stock chart history)."""
+    rows, hist = [], {}
     newest = closes.index.max()
     for _, m in uni.iterrows():
         tkr = m["ticker"]
@@ -188,9 +226,25 @@ def analyse(closes: pd.DataFrame, uni: pd.DataFrame) -> list[dict]:
         coverage = (s4.index[-1] - s4.index[0]).days / (365.25 * YEARS)
         price, avg = float(s4.iloc[-1]), float(s4.mean())
 
-        weekly = s4.resample("W-FRI").last().dropna()
-        if weekly.index[-1] < last_date:  # make sure the last point is today's price
+        # Chart history: weekly for the long views, daily for the last ~13 months,
+        # 15-minute bars for the last 5 sessions.
+        weekly = s.resample("W-FRI").last().dropna()
+        weekly = weekly[weekly.index <= last_date]
+        if weekly.index[-1] < last_date:  # make sure the last point is the latest price
             weekly.loc[last_date] = price
+        daily = s[s.index > last_date - pd.DateOffset(days=400)]
+        h = {
+            "w": [[d, round(float(v), 2)] for d, v in zip(_days(weekly.index), weekly.values)],
+            "d": [[d, round(float(v), 2)] for d, v in zip(_days(daily.index), daily.values)],
+            "m": [],
+        }
+        if tkr in intraday.columns:
+            iv = intraday[tkr].dropna()
+            iv = iv[iv > 0]
+            if str(tkr).endswith(".L"):  # same pence/pounds glitch as daily data
+                iv = iv.where(~(iv < price / 50), iv * 100)
+            h["m"] = [[int(t.value // 60_000_000_000), round(float(v), 2)] for t, v in iv.items()]
+        hist[tkr] = h
 
         rows.append({
             "t": tkr,
@@ -204,10 +258,9 @@ def analyse(closes: pd.DataFrame, uni: pd.DataFrame) -> list[dict]:
             "hi": round(float(s4.max()), 2),
             "cov": round(min(coverage, 1.0), 3),
             "d": last_date.strftime("%Y-%m-%d"),
-            "h0": weekly.index[0].strftime("%Y-%m-%d"),
-            "h": [round(float(v), 2) for v in weekly.values],
+            "yrs": round((last_date - s.index[0]).days / 365.25, 1),
         })
-    return rows
+    return rows, hist
 
 
 # --------------------------------------------------------------------------- #
@@ -324,7 +377,7 @@ def earnings_health(f: dict | None, price_vs_avg: float) -> dict:
 # --------------------------------------------------------------------------- #
 def demo_data() -> tuple[pd.DataFrame, pd.DataFrame]:
     rng = np.random.default_rng(7)
-    days = pd.bdate_range(end=pd.Timestamp.today().normalize(), periods=int(252 * YEARS) + 15)
+    days = pd.bdate_range(end=pd.Timestamp.today().normalize(), periods=int(252 * HISTORY_YEARS) + 15)
     sectors = ["Technology", "Financials", "Health Care", "Energy", "Industrials", "Consumer"]
     meta, cols = [], {}
     for k in range(48):
@@ -338,8 +391,26 @@ def demo_data() -> tuple[pd.DataFrame, pd.DataFrame]:
                      "sector": sectors[k % len(sectors)],
                      "index": "FTSE 100" if london else "S&P 500"})
     closes = pd.DataFrame(cols, index=days)
-    closes.iloc[: len(days) // 3, 5] = np.nan  # one recent listing -> "not enough history"
+    closes.iloc[: len(days) - 700, 5] = np.nan  # one recent listing -> "not enough history"
+    closes.iloc[: len(days) // 2, 7] = np.nan   # one with only ~5 years of history
     return closes, pd.DataFrame(meta)
+
+
+def demo_intraday(closes: pd.DataFrame) -> pd.DataFrame:
+    rng = np.random.default_rng(3)
+    sessions = closes.index[-5:]
+    stamps, data = [], {t: [] for t in closes.columns}
+    for d in sessions:
+        for k in range(27):  # 14:30-21:00 UTC in 15-minute steps
+            stamps.append(pd.Timestamp(d).tz_localize("UTC") + pd.Timedelta(minutes=870 + 15 * k))
+    for t in closes.columns:
+        prev = closes[t].iloc[-6]
+        for d in sessions:
+            close = closes[t].loc[d]
+            path = np.linspace(prev, close, 27) * (1 + np.concatenate([[0], rng.normal(0, 0.003, 25).cumsum() * 0.5, [0]]))
+            data[t].extend(path)
+            prev = close
+    return pd.DataFrame(data, index=pd.DatetimeIndex(stamps))
 
 
 def demo_fundamentals(tickers: list[str]) -> dict:
@@ -364,15 +435,24 @@ def demo_fundamentals(tickers: list[str]) -> dict:
 # --------------------------------------------------------------------------- #
 # 5. Output
 # --------------------------------------------------------------------------- #
-def write_outputs(rows: list[dict], demo: bool) -> Path:
+def write_outputs(rows: list[dict], hist: dict, demo: bool) -> Path:
     payload = {
         "generated": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         "years": YEARS,
         "minCoverage": MIN_COVERAGE,
+        "thresholds": SELL_THRESHOLDS,
+        "defaultThreshold": DEFAULT_SELL_THRESHOLD,
         "demo": demo,
         "stocks": rows,
     }
     OUT_DIR.mkdir(exist_ok=True)
+    (OUT_DIR / ".nojekyll").write_text("")  # tell GitHub Pages to serve files as-is
+    hdir = OUT_DIR / "h"
+    if hdir.exists():
+        shutil.rmtree(hdir)
+    hdir.mkdir()
+    for tkr, h in hist.items():
+        (hdir / f"{tkr}.json").write_text(json.dumps(h, separators=(",", ":")))
     blob = json.dumps(payload, separators=(",", ":"))
     (OUT_DIR / "data.json").write_text(blob)
     html = TEMPLATE.read_text().replace("/*__DATA__*/null", blob.replace("</", "<\\/"))
@@ -386,13 +466,19 @@ def main() -> None:
     ap.add_argument("--demo", action="store_true", help="use synthetic prices (no internet needed)")
     args = ap.parse_args()
 
+    if not SELL_THRESHOLDS or DEFAULT_SELL_THRESHOLD not in SELL_THRESHOLDS:
+        sys.exit("DEFAULT_SELL_THRESHOLD must be one of the numbers in SELL_THRESHOLDS")
+
     if args.demo:
         closes, uni = demo_data()
+        intraday = demo_intraday(closes)
     else:
         uni = get_universe()
         closes = download_closes(uni["ticker"].tolist())
+        print("Downloading intraday prices for the 1D/5D charts")
+        intraday = download_intraday(uni["ticker"].tolist())
 
-    rows = analyse(closes, uni)
+    rows, hist = analyse(closes, uni, intraday)
 
     near = [r["t"] for r in rows if r["p"] / r["a"] - 1 <= FUND_SCOPE]
     funds = demo_fundamentals(near) if args.demo else load_fundamentals(near)
@@ -400,7 +486,7 @@ def main() -> None:
         if r["t"] in funds:
             r["e"] = earnings_health(funds[r["t"]], r["p"] / r["a"] - 1)
 
-    out = write_outputs(rows, args.demo)
+    out = write_outputs(rows, hist, args.demo)
     cheap = [r for r in rows if r["p"] <= r["a"] and r["cov"] >= MIN_COVERAGE]
     buys = sum(1 for r in cheap if r.get("e", {}).get("ok"))
     print(f"Analysed {len(rows)} stocks; {len(cheap)} at or below their {YEARS}-year average, "
